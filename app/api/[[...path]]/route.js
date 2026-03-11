@@ -7,7 +7,7 @@ import Stripe from 'stripe'
 let client
 let db
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY)
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || 'sk_test_fallback')
 
 async function connectToMongo() {
   if (!client) {
