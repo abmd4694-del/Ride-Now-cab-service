@@ -1,13 +1,13 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { toast } from 'sonner'
-import { MapPin, Navigation, Car, DollarSign, Clock, X } from 'lucide-react'
+import { MapPin, Navigation, Car, DollarSign, Clock, X, Search, Loader2 } from 'lucide-react'
 import dynamic from 'next/dynamic'
 
 const MapComponent = dynamic(() => import('./MapComponent'), { ssr: false })
@@ -26,10 +26,112 @@ export default function RideBooking({ user, onBookRide }) {
   const [dropoffLocation, setDropoffLocation] = useState(null)
   const [pickupAddress, setPickupAddress] = useState('')
   const [dropoffAddress, setDropoffAddress] = useState('')
+  const [pickupQuery, setPickupQuery] = useState('')
+  const [dropoffQuery, setDropoffQuery] = useState('')
+  const [pickupSuggestions, setPickupSuggestions] = useState([])
+  const [dropoffSuggestions, setDropoffSuggestions] = useState([])
+  const [showPickupSuggestions, setShowPickupSuggestions] = useState(false)
+  const [showDropoffSuggestions, setShowDropoffSuggestions] = useState(false)
+  const [searchingPickup, setSearchingPickup] = useState(false)
+  const [searchingDropoff, setSearchingDropoff] = useState(false)
   const [selectedCarType, setSelectedCarType] = useState('economy')
   const [estimatedFare, setEstimatedFare] = useState(null)
   const [estimatedTime, setEstimatedTime] = useState(null)
   const [loading, setLoading] = useState(false)
+  const pickupRef = useRef(null)
+  const dropoffRef = useRef(null)
+
+  // Geocoding function using Nominatim (OpenStreetMap)
+  const searchAddress = async (query, type) => {
+    if (!query || query.length < 3) {
+      if (type === 'pickup') setPickupSuggestions([])
+      else setDropoffSuggestions([])
+      return
+    }
+
+    if (type === 'pickup') setSearchingPickup(true)
+    else setSearchingDropoff(true)
+
+    try {
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=5&addressdetails=1`,
+        {
+          headers: {
+            'Accept': 'application/json',
+            'User-Agent': 'RideNow App'
+          }
+        }
+      )
+      const data = await response.json()
+      
+      const suggestions = data.map(item => ({
+        display_name: item.display_name,
+        lat: parseFloat(item.lat),
+        lng: parseFloat(item.lon),
+        short_name: item.address ? 
+          `${item.address.road || item.address.neighbourhood || ''}, ${item.address.city || item.address.town || item.address.village || ''}`.replace(/^, /, '') :
+          item.display_name.split(',').slice(0, 2).join(',')
+      }))
+
+      if (type === 'pickup') setPickupSuggestions(suggestions)
+      else setDropoffSuggestions(suggestions)
+    } catch (error) {
+      console.error('Geocoding error:', error)
+      toast.error('Failed to search address')
+    } finally {
+      if (type === 'pickup') setSearchingPickup(false)
+      else setSearchingDropoff(false)
+    }
+  }
+
+  // Debounced search
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (pickupQuery && showPickupSuggestions) {
+        searchAddress(pickupQuery, 'pickup')
+      }
+    }, 500)
+    return () => clearTimeout(timer)
+  }, [pickupQuery])
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (dropoffQuery && showDropoffSuggestions) {
+        searchAddress(dropoffQuery, 'dropoff')
+      }
+    }, 500)
+    return () => clearTimeout(timer)
+  }, [dropoffQuery])
+
+  // Click outside to close suggestions
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (pickupRef.current && !pickupRef.current.contains(event.target)) {
+        setShowPickupSuggestions(false)
+      }
+      if (dropoffRef.current && !dropoffRef.current.contains(event.target)) {
+        setShowDropoffSuggestions(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  const selectPickupSuggestion = (suggestion) => {
+    setPickupLocation({ lat: suggestion.lat, lng: suggestion.lng })
+    setPickupAddress(suggestion.short_name)
+    setPickupQuery(suggestion.short_name)
+    setShowPickupSuggestions(false)
+    setPickupSuggestions([])
+  }
+
+  const selectDropoffSuggestion = (suggestion) => {
+    setDropoffLocation({ lat: suggestion.lat, lng: suggestion.lng })
+    setDropoffAddress(suggestion.short_name)
+    setDropoffQuery(suggestion.short_name)
+    setShowDropoffSuggestions(false)
+    setDropoffSuggestions([])
+  }
 
   // Calculate distance between two points
   const calculateDistance = (lat1, lon1, lat2, lon2) => {
@@ -63,12 +165,30 @@ export default function RideBooking({ user, onBookRide }) {
   const getCurrentLocation = () => {
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
-        (position) => {
-          setPickupLocation({
+        async (position) => {
+          const loc = {
             lat: position.coords.latitude,
             lng: position.coords.longitude
-          })
-          setPickupAddress('Current Location')
+          }
+          setPickupLocation(loc)
+          
+          // Reverse geocode to get address
+          try {
+            const response = await fetch(
+              `https://nominatim.openstreetmap.org/reverse?format=json&lat=${loc.lat}&lon=${loc.lng}`,
+              { headers: { 'User-Agent': 'RideNow App' } }
+            )
+            const data = await response.json()
+            const address = data.address ? 
+              `${data.address.road || ''}, ${data.address.city || data.address.town || ''}`.replace(/^, /, '') :
+              'Current Location'
+            setPickupAddress(address)
+            setPickupQuery(address)
+          } catch {
+            setPickupAddress('Current Location')
+            setPickupQuery('Current Location')
+          }
+          
           toast.success('Pickup location set to current location')
         },
         (error) => {
@@ -83,6 +203,8 @@ export default function RideBooking({ user, onBookRide }) {
     setDropoffLocation(null)
     setPickupAddress('')
     setDropoffAddress('')
+    setPickupQuery('')
+    setDropoffQuery('')
     setEstimatedFare(null)
     setEstimatedTime(null)
   }
@@ -143,27 +265,112 @@ export default function RideBooking({ user, onBookRide }) {
             )}
           </CardTitle>
           <p className="text-sm text-muted-foreground">
-            Click on the map to set {!pickupLocation ? 'pickup' : !dropoffLocation ? 'dropoff' : 'locations'}
+            Type an address or click on the map
           </p>
         </CardHeader>
-        <CardContent>
-          <div className="h-[400px] rounded-xl overflow-hidden border">
+        <CardContent className="space-y-4">
+          {/* Pickup Input */}
+          <div className="relative" ref={pickupRef}>
+            <Label className="text-sm font-medium flex items-center gap-2 mb-2">
+              <div className="w-3 h-3 bg-green-500 rounded-full" />
+              Pickup Location
+            </Label>
+            <div className="relative">
+              <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Enter pickup address..."
+                className="pl-10 pr-10"
+                value={pickupQuery}
+                onChange={(e) => {
+                  setPickupQuery(e.target.value)
+                  setShowPickupSuggestions(true)
+                }}
+                onFocus={() => setShowPickupSuggestions(true)}
+              />
+              {searchingPickup && (
+                <Loader2 className="absolute right-3 top-3 h-4 w-4 animate-spin text-muted-foreground" />
+              )}
+            </div>
+            {showPickupSuggestions && pickupSuggestions.length > 0 && (
+              <div className="absolute z-50 w-full mt-1 bg-white border rounded-lg shadow-lg max-h-60 overflow-auto">
+                {pickupSuggestions.map((suggestion, index) => (
+                  <button
+                    key={index}
+                    className="w-full px-4 py-3 text-left hover:bg-gray-50 border-b last:border-b-0 flex items-start gap-3"
+                    onClick={() => selectPickupSuggestion(suggestion)}
+                  >
+                    <MapPin className="h-4 w-4 mt-0.5 text-green-500 flex-shrink-0" />
+                    <div>
+                      <p className="font-medium text-sm">{suggestion.short_name}</p>
+                      <p className="text-xs text-muted-foreground truncate">{suggestion.display_name}</p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Dropoff Input */}
+          <div className="relative" ref={dropoffRef}>
+            <Label className="text-sm font-medium flex items-center gap-2 mb-2">
+              <div className="w-3 h-3 bg-red-500 rounded-full" />
+              Dropoff Location
+            </Label>
+            <div className="relative">
+              <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Enter dropoff address..."
+                className="pl-10 pr-10"
+                value={dropoffQuery}
+                onChange={(e) => {
+                  setDropoffQuery(e.target.value)
+                  setShowDropoffSuggestions(true)
+                }}
+                onFocus={() => setShowDropoffSuggestions(true)}
+              />
+              {searchingDropoff && (
+                <Loader2 className="absolute right-3 top-3 h-4 w-4 animate-spin text-muted-foreground" />
+              )}
+            </div>
+            {showDropoffSuggestions && dropoffSuggestions.length > 0 && (
+              <div className="absolute z-50 w-full mt-1 bg-white border rounded-lg shadow-lg max-h-60 overflow-auto">
+                {dropoffSuggestions.map((suggestion, index) => (
+                  <button
+                    key={index}
+                    className="w-full px-4 py-3 text-left hover:bg-gray-50 border-b last:border-b-0 flex items-start gap-3"
+                    onClick={() => selectDropoffSuggestion(suggestion)}
+                  >
+                    <MapPin className="h-4 w-4 mt-0.5 text-red-500 flex-shrink-0" />
+                    <div>
+                      <p className="font-medium text-sm">{suggestion.short_name}</p>
+                      <p className="text-xs text-muted-foreground truncate">{suggestion.display_name}</p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Map */}
+          <div className="h-[300px] rounded-xl overflow-hidden border">
             <MapComponent
               pickupLocation={pickupLocation}
               dropoffLocation={dropoffLocation}
               onPickupChange={(loc) => {
                 setPickupLocation(loc)
                 setPickupAddress(`${loc.lat.toFixed(4)}, ${loc.lng.toFixed(4)}`)
+                setPickupQuery(`${loc.lat.toFixed(4)}, ${loc.lng.toFixed(4)}`)
               }}
               onDropoffChange={(loc) => {
                 setDropoffLocation(loc)
                 setDropoffAddress(`${loc.lat.toFixed(4)}, ${loc.lng.toFixed(4)}`)
+                setDropoffQuery(`${loc.lat.toFixed(4)}, ${loc.lng.toFixed(4)}`)
               }}
             />
           </div>
           <Button
             variant="outline"
-            className="w-full mt-3"
+            className="w-full"
             onClick={getCurrentLocation}
           >
             <Navigation className="h-4 w-4 mr-2" />
@@ -181,14 +388,14 @@ export default function RideBooking({ user, onBookRide }) {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          {/* Location Display */}
+          {/* Location Summary */}
           <div className="space-y-3">
             <div className="flex items-center gap-3 p-3 bg-green-50 rounded-lg border border-green-200">
               <div className="w-3 h-3 bg-green-500 rounded-full" />
               <div className="flex-1">
                 <p className="text-xs text-muted-foreground">Pickup</p>
                 <p className="font-medium text-sm truncate">
-                  {pickupAddress || 'Click on map to select'}
+                  {pickupAddress || 'Enter pickup address above'}
                 </p>
               </div>
             </div>
@@ -197,7 +404,7 @@ export default function RideBooking({ user, onBookRide }) {
               <div className="flex-1">
                 <p className="text-xs text-muted-foreground">Dropoff</p>
                 <p className="font-medium text-sm truncate">
-                  {dropoffAddress || 'Click on map to select'}
+                  {dropoffAddress || 'Enter dropoff address above'}
                 </p>
               </div>
             </div>
@@ -263,7 +470,7 @@ export default function RideBooking({ user, onBookRide }) {
           ) : (
             <div className="text-center py-8 text-muted-foreground">
               <MapPin className="h-12 w-12 mx-auto mb-3 opacity-50" />
-              <p>Select pickup and dropoff locations to see fare estimate</p>
+              <p>Enter pickup and dropoff locations to see fare estimate</p>
             </div>
           )}
         </CardContent>
