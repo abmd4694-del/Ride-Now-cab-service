@@ -157,7 +157,7 @@ export default function App() {
           </nav>
 
           {/* Hero Content */}
-          <div className="relative z-10 flex flex-col justify-center h-full px-6 md:px-12 lg:px-24 max-w-2xl">
+          <div className="relative z-10 flex flex-col justify-center px-6 md:px-12 lg:px-24 max-w-2xl pt-24 pb-64">
             <h1 className="text-4xl md:text-6xl font-bold text-white mb-6">
               Your Ride,<br />Your Way
             </h1>
@@ -187,22 +187,22 @@ export default function App() {
           </div>
 
           {/* Features */}
-          <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-background to-transparent p-6">
-            <div className="max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-6">
-              <div className="bg-white/10 backdrop-blur-sm rounded-lg p-6 text-white">
-                <MapPin className="h-8 w-8 mb-3 text-primary" />
-                <h3 className="font-semibold text-lg mb-2">Real-time Tracking</h3>
-                <p className="text-gray-300 text-sm">Track your ride in real-time on the map</p>
+          <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-background via-background/80 to-transparent pt-16 pb-6 px-6">
+            <div className="max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="bg-white/90 backdrop-blur-sm rounded-lg p-4 shadow-lg">
+                <MapPin className="h-6 w-6 mb-2 text-primary" />
+                <h3 className="font-semibold text-gray-900 mb-1">Real-time Tracking</h3>
+                <p className="text-gray-600 text-sm">Track your ride in real-time on the map</p>
               </div>
-              <div className="bg-white/10 backdrop-blur-sm rounded-lg p-6 text-white">
-                <Car className="h-8 w-8 mb-3 text-primary" />
-                <h3 className="font-semibold text-lg mb-2">Multiple Vehicle Types</h3>
-                <p className="text-gray-300 text-sm">Choose from Economy, Comfort, or Premium</p>
+              <div className="bg-white/90 backdrop-blur-sm rounded-lg p-4 shadow-lg">
+                <Car className="h-6 w-6 mb-2 text-primary" />
+                <h3 className="font-semibold text-gray-900 mb-1">Multiple Vehicle Types</h3>
+                <p className="text-gray-600 text-sm">Choose from Economy, Comfort, or Premium</p>
               </div>
-              <div className="bg-white/10 backdrop-blur-sm rounded-lg p-6 text-white">
-                <User className="h-8 w-8 mb-3 text-primary" />
-                <h3 className="font-semibold text-lg mb-2">Verified Drivers</h3>
-                <p className="text-gray-300 text-sm">All drivers are background checked</p>
+              <div className="bg-white/90 backdrop-blur-sm rounded-lg p-4 shadow-lg">
+                <User className="h-6 w-6 mb-2 text-primary" />
+                <h3 className="font-semibold text-gray-900 mb-1">Verified Drivers</h3>
+                <p className="text-gray-600 text-sm">All drivers are background checked</p>
               </div>
             </div>
           </div>
