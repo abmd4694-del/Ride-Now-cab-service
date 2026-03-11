@@ -116,6 +116,11 @@ async function handleRoute(request, { params }) {
 
     // ==================== RIDE ENDPOINTS ====================
 
+    // Generate 4-digit verification code
+    const generateVerificationCode = () => {
+      return Math.floor(1000 + Math.random() * 9000).toString()
+    }
+
     // Create ride - POST /api/rides
     if (route === '/rides' && method === 'POST') {
       const body = await request.json()
@@ -133,6 +138,8 @@ async function handleRoute(request, { params }) {
         estimated_fare: body.estimated_fare || 0,
         estimated_time: body.estimated_time || 0,
         status: 'requested',
+        verification_code: null, // Will be set when driver accepts
+        code_verified: false,
         created_at: new Date(),
         updated_at: new Date(),
         completed_at: null,
@@ -210,6 +217,27 @@ async function handleRoute(request, { params }) {
       const body = await request.json()
       
       const updateData = { ...body, updated_at: new Date() }
+      
+      // Generate verification code when driver accepts
+      if (body.status === 'accepted' && body.driver_id) {
+        updateData.verification_code = generateVerificationCode()
+      }
+      
+      // Mark code as verified when driver starts trip with correct code
+      if (body.verify_code) {
+        const existingRide = await db.collection('rides').findOne({ id: rideId })
+        if (existingRide && existingRide.verification_code === body.verify_code) {
+          updateData.code_verified = true
+          updateData.status = 'in_progress'
+        } else {
+          return handleCORS(NextResponse.json(
+            { error: "Invalid verification code" },
+            { status: 400 }
+          ))
+        }
+        delete updateData.verify_code
+      }
+      
       if (body.status === 'completed') {
         updateData.completed_at = new Date()
       }
@@ -474,6 +502,65 @@ async function handleRoute(request, { params }) {
         timestamp: new Date().toISOString(),
         version: '1.0.0'
       }))
+    }
+
+    // ==================== NEARBY PLACES ENDPOINT ====================
+    // GET /api/places/nearby?lat=xxx&lng=xxx
+    if (route === '/places/nearby' && method === 'GET') {
+      const url = new URL(request.url)
+      const lat = url.searchParams.get('lat')
+      const lng = url.searchParams.get('lng')
+
+      if (!lat || !lng) {
+        return handleCORS(NextResponse.json(
+          { error: "lat and lng are required" },
+          { status: 400 }
+        ))
+      }
+
+      try {
+        // Use Nominatim reverse geocoding with nearby search
+        const radius = 1000 // 1km radius
+        const categories = ['tourism', 'amenity', 'shop', 'transport']
+        
+        // Search for nearby places using Overpass API (OpenStreetMap)
+        const overpassQuery = `
+          [out:json][timeout:10];
+          (
+            node["amenity"~"restaurant|cafe|hospital|pharmacy|bank|fuel"](around:${radius},${lat},${lng});
+            node["tourism"~"hotel|attraction|museum"](around:${radius},${lat},${lng});
+            node["shop"~"mall|supermarket"](around:${radius},${lat},${lng});
+            node["public_transport"="station"](around:${radius},${lat},${lng});
+          );
+          out body 10;
+        `
+        
+        const response = await fetch('https://overpass-api.de/api/interpreter', {
+          method: 'POST',
+          body: `data=${encodeURIComponent(overpassQuery)}`,
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded'
+          }
+        })
+
+        const data = await response.json()
+        
+        const places = data.elements?.map(place => ({
+          id: place.id,
+          name: place.tags?.name || place.tags?.amenity || place.tags?.tourism || 'Unknown Place',
+          type: place.tags?.amenity || place.tags?.tourism || place.tags?.shop || 'place',
+          lat: place.lat,
+          lng: place.lon,
+          address: place.tags?.['addr:street'] ? 
+            `${place.tags?.['addr:housenumber'] || ''} ${place.tags?.['addr:street']}`.trim() : 
+            null
+        })).filter(p => p.name !== 'Unknown Place') || []
+
+        return handleCORS(NextResponse.json({ places }))
+      } catch (error) {
+        console.error('Nearby places error:', error)
+        return handleCORS(NextResponse.json({ places: [] }))
+      }
     }
 
     // Route not found

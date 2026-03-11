@@ -5,9 +5,11 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Switch } from '@/components/ui/switch'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { toast } from 'sonner'
 import { supabase } from '@/lib/supabase'
-import { Car, MapPin, DollarSign, Clock, Navigation, CheckCircle, XCircle, Star } from 'lucide-react'
+import { Car, MapPin, DollarSign, Clock, Navigation, CheckCircle, XCircle, Star, Shield, KeyRound } from 'lucide-react'
 import dynamic from 'next/dynamic'
 
 const MapComponent = dynamic(() => import('./MapComponent'), { ssr: false })
@@ -19,6 +21,8 @@ export default function DriverDashboard({ user }) {
   const [earnings, setEarnings] = useState({ today: 0, total: 0 })
   const [loading, setLoading] = useState(false)
   const [driverLocation, setDriverLocation] = useState(null)
+  const [verificationCode, setVerificationCode] = useState('')
+  const [showCodeInput, setShowCodeInput] = useState(false)
 
   // Get driver's current location
   useEffect(() => {
@@ -169,6 +173,50 @@ export default function DriverDashboard({ user }) {
     }
   }
 
+  const verifyCodeAndStartTrip = async () => {
+    if (!currentRide || !verificationCode) {
+      toast.error('Please enter the verification code')
+      return
+    }
+
+    if (verificationCode.length !== 4) {
+      toast.error('Code must be 4 digits')
+      return
+    }
+
+    setLoading(true)
+    try {
+      const response = await fetch(`/api/rides/${currentRide.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ verify_code: verificationCode })
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || 'Invalid code')
+      }
+
+      const updatedRide = await response.json()
+
+      // Notify rider
+      supabase.channel(`ride-${currentRide.id}`).send({
+        type: 'broadcast',
+        event: 'ride_update',
+        payload: updatedRide
+      })
+
+      setCurrentRide(updatedRide)
+      setShowCodeInput(false)
+      setVerificationCode('')
+      toast.success('Code verified! Trip started.')
+    } catch (error) {
+      toast.error(error.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
   return (
     <div className="space-y-6">
       {/* Header Stats */}
@@ -272,15 +320,56 @@ export default function DriverDashboard({ user }) {
                   Arrived at Pickup
                 </Button>
               )}
-              {currentRide.status === 'arrived' && (
+              {currentRide.status === 'arrived' && !showCodeInput && (
                 <Button
                   className="flex-1"
-                  onClick={() => updateRideStatus('in_progress')}
+                  onClick={() => setShowCodeInput(true)}
                   disabled={loading}
                 >
-                  <Navigation className="h-4 w-4 mr-2" />
-                  Start Trip
+                  <KeyRound className="h-4 w-4 mr-2" />
+                  Enter Ride Code
                 </Button>
+              )}
+              {currentRide.status === 'arrived' && showCodeInput && (
+                <div className="w-full space-y-3">
+                  <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+                    <div className="flex items-center gap-2 mb-3">
+                      <Shield className="h-5 w-5 text-blue-600" />
+                      <span className="font-medium text-blue-900">Enter Rider's Code</span>
+                    </div>
+                    <p className="text-sm text-blue-700 mb-3">Ask the rider for their 4-digit verification code</p>
+                    <div className="flex gap-2">
+                      <Input
+                        type="text"
+                        maxLength={4}
+                        placeholder="0000"
+                        value={verificationCode}
+                        onChange={(e) => setVerificationCode(e.target.value.replace(/\D/g, ''))}
+                        className="text-center text-2xl font-bold tracking-widest"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      className="flex-1"
+                      onClick={() => {
+                        setShowCodeInput(false)
+                        setVerificationCode('')
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      className="flex-1"
+                      onClick={verifyCodeAndStartTrip}
+                      disabled={loading || verificationCode.length !== 4}
+                    >
+                      <Navigation className="h-4 w-4 mr-2" />
+                      Verify & Start Trip
+                    </Button>
+                  </div>
+                </div>
               )}
               {currentRide.status === 'in_progress' && (
                 <Button

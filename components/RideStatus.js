@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
 import { toast } from 'sonner'
 import { supabase } from '@/lib/supabase'
-import { Phone, MessageSquare, X, Star, DollarSign, Navigation, Car, CheckCircle } from 'lucide-react'
+import { Phone, MessageSquare, X, Star, DollarSign, Navigation, Car, CheckCircle, Shield, Copy } from 'lucide-react'
 import dynamic from 'next/dynamic'
 
 const MapComponent = dynamic(() => import('./MapComponent'), { ssr: false })
@@ -26,6 +26,7 @@ export default function RideStatus({ ride, user, onRideUpdate, onCancelRide }) {
   const [showRating, setShowRating] = useState(false)
   const [rating, setRating] = useState(5)
   const [loading, setLoading] = useState(false)
+  const [codeCopied, setCodeCopied] = useState(false)
 
   // Subscribe to real-time updates
   useEffect(() => {
@@ -65,6 +66,15 @@ export default function RideStatus({ ride, user, onRideUpdate, onCancelRide }) {
   }, [ride.id])
 
   const currentStep = STATUS_STEPS.find(s => s.status === currentRide.status) || STATUS_STEPS[0]
+
+  const copyVerificationCode = () => {
+    if (currentRide.verification_code) {
+      navigator.clipboard.writeText(currentRide.verification_code)
+      setCodeCopied(true)
+      toast.success('Code copied to clipboard!')
+      setTimeout(() => setCodeCopied(false), 2000)
+    }
+  }
 
   const handleCancelRide = async () => {
     if (currentRide.status !== 'requested') {
@@ -249,6 +259,48 @@ export default function RideStatus({ ride, user, onRideUpdate, onCancelRide }) {
                   <MessageSquare className="h-4 w-4" />
                 </Button>
               </div>
+            </div>
+          )}
+
+          {/* Verification Code - Show when driver is assigned */}
+          {currentRide.verification_code && (currentRide.status === 'accepted' || currentRide.status === 'arrived') && (
+            <div className="p-4 bg-gradient-to-r from-blue-500 to-blue-600 rounded-lg text-white">
+              <div className="flex items-center gap-2 mb-2">
+                <Shield className="h-5 w-5" />
+                <span className="font-medium">Ride Verification Code</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <div className="flex gap-2">
+                  {currentRide.verification_code.split('').map((digit, i) => (
+                    <div
+                      key={i}
+                      className="w-12 h-14 bg-white/20 rounded-lg flex items-center justify-center text-2xl font-bold"
+                    >
+                      {digit}
+                    </div>
+                  ))}
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-white hover:bg-white/20"
+                  onClick={copyVerificationCode}
+                >
+                  <Copy className="h-4 w-4 mr-1" />
+                  {codeCopied ? 'Copied!' : 'Copy'}
+                </Button>
+              </div>
+              <p className="text-xs text-white/80 mt-2">
+                Share this code with your driver to start the trip
+              </p>
+            </div>
+          )}
+
+          {/* Code Verified Badge */}
+          {currentRide.code_verified && currentRide.status === 'in_progress' && (
+            <div className="flex items-center gap-2 p-3 bg-green-100 text-green-800 rounded-lg">
+              <CheckCircle className="h-5 w-5" />
+              <span className="font-medium">Code verified - Trip in progress</span>
             </div>
           )}
 

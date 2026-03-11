@@ -6,8 +6,9 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
+import { Badge } from '@/components/ui/badge'
 import { toast } from 'sonner'
-import { MapPin, Navigation, Car, DollarSign, Clock, X, Search, Loader2 } from 'lucide-react'
+import { MapPin, Navigation, Car, DollarSign, Clock, X, Search, Loader2, Building2, Coffee, Hotel, ShoppingBag, Fuel, Hospital } from 'lucide-react'
 import dynamic from 'next/dynamic'
 
 const MapComponent = dynamic(() => import('./MapComponent'), { ssr: false })
@@ -38,8 +39,58 @@ export default function RideBooking({ user, onBookRide }) {
   const [estimatedFare, setEstimatedFare] = useState(null)
   const [estimatedTime, setEstimatedTime] = useState(null)
   const [loading, setLoading] = useState(false)
+  const [nearbyPlaces, setNearbyPlaces] = useState([])
+  const [loadingPlaces, setLoadingPlaces] = useState(false)
   const pickupRef = useRef(null)
   const dropoffRef = useRef(null)
+
+  // Place type icons
+  const getPlaceIcon = (type) => {
+    const icons = {
+      restaurant: <Coffee className="h-4 w-4" />,
+      cafe: <Coffee className="h-4 w-4" />,
+      hotel: <Hotel className="h-4 w-4" />,
+      hospital: <Hospital className="h-4 w-4" />,
+      fuel: <Fuel className="h-4 w-4" />,
+      mall: <ShoppingBag className="h-4 w-4" />,
+      supermarket: <ShoppingBag className="h-4 w-4" />,
+      attraction: <Building2 className="h-4 w-4" />,
+      museum: <Building2 className="h-4 w-4" />,
+      default: <MapPin className="h-4 w-4" />
+    }
+    return icons[type] || icons.default
+  }
+
+  // Fetch nearby places when pickup location changes
+  useEffect(() => {
+    if (pickupLocation) {
+      fetchNearbyPlaces(pickupLocation.lat, pickupLocation.lng)
+    } else {
+      setNearbyPlaces([])
+    }
+  }, [pickupLocation])
+
+  const fetchNearbyPlaces = async (lat, lng) => {
+    setLoadingPlaces(true)
+    try {
+      const response = await fetch(`/api/places/nearby?lat=${lat}&lng=${lng}`)
+      if (response.ok) {
+        const data = await response.json()
+        setNearbyPlaces(data.places || [])
+      }
+    } catch (error) {
+      console.error('Error fetching nearby places:', error)
+    } finally {
+      setLoadingPlaces(false)
+    }
+  }
+
+  const selectNearbyPlace = (place) => {
+    setDropoffLocation({ lat: place.lat, lng: place.lng })
+    setDropoffAddress(place.name)
+    setDropoffQuery(place.name)
+    toast.success(`Selected ${place.name} as dropoff`)
+  }
 
   // Geocoding function using Nominatim (OpenStreetMap)
   const searchAddress = async (query, type) => {
@@ -376,6 +427,44 @@ export default function RideBooking({ user, onBookRide }) {
             <Navigation className="h-4 w-4 mr-2" />
             Use Current Location as Pickup
           </Button>
+
+          {/* Nearby Places */}
+          {pickupLocation && (
+            <div className="mt-4">
+              <Label className="text-sm font-medium flex items-center gap-2 mb-2">
+                <Building2 className="h-4 w-4 text-primary" />
+                Nearby Places (Quick Select Dropoff)
+              </Label>
+              {loadingPlaces ? (
+                <div className="flex items-center justify-center py-4 text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  <span className="text-sm">Finding nearby places...</span>
+                </div>
+              ) : nearbyPlaces.length > 0 ? (
+                <div className="grid grid-cols-2 gap-2 max-h-[200px] overflow-auto">
+                  {nearbyPlaces.map((place, index) => (
+                    <button
+                      key={index}
+                      onClick={() => selectNearbyPlace(place)}
+                      className="flex items-center gap-2 p-2 text-left rounded-lg border hover:border-primary hover:bg-primary/5 transition-colors"
+                    >
+                      <div className="p-1.5 rounded-full bg-primary/10 text-primary">
+                        {getPlaceIcon(place.type)}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate">{place.name}</p>
+                        <p className="text-xs text-muted-foreground capitalize">{place.type}</p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground text-center py-2">
+                  No nearby places found
+                </p>
+              )}
+            </div>
+          )}
         </CardContent>
       </Card>
 
