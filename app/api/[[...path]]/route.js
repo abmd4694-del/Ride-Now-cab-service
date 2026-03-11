@@ -11,9 +11,22 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY)
 
 async function connectToMongo() {
   if (!client) {
-    client = new MongoClient(process.env.MONGO_URL)
-    await client.connect()
-    db = client.db(process.env.DB_NAME)
+    try {
+      // Connect to MongoDB using the Server API
+      client = new MongoClient(process.env.MONGO_URL, {
+        serverApi: {
+          version: '1',
+          strict: true,
+          deprecationErrors: true,
+        }
+      })
+      await client.connect()
+      db = client.db(process.env.DB_NAME)
+    } catch (e) {
+      client = null
+      db = null
+      throw e
+    }
   }
   return db
 }
@@ -248,6 +261,35 @@ async function handleRoute(request, { params }) {
         { returnDocument: 'after' }
       )
 
+      if (!result) {
+        return handleCORS(NextResponse.json(
+          { error: "Ride not found" },
+          { status: 404 }
+        ))
+      }
+
+      const { _id, ...cleanRide } = result
+      return handleCORS(NextResponse.json(cleanRide))
+    }
+
+    // Emergency SOS - POST /api/rides/:id/sos
+    const sosMatch = route.match(/^\/rides\/([^/]+)\/sos$/)
+    if (sosMatch && method === 'POST') {
+      const rideId = sosMatch[1]
+      
+      const updateData = { 
+        status: 'cancelled', 
+        sos_triggered: true,
+        updated_at: new Date(),
+        completed_at: new Date()
+      }
+      
+      const result = await db.collection('rides').findOneAndUpdate(
+        { id: rideId },
+        { $set: updateData },
+        { returnDocument: 'after' }
+      )
+      
       if (!result) {
         return handleCORS(NextResponse.json(
           { error: "Ride not found" },

@@ -7,8 +7,19 @@ import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
 import { toast } from 'sonner'
 import { supabase } from '@/lib/supabase'
-import { Phone, MessageSquare, X, Star, DollarSign, Navigation, Car, CheckCircle, Shield, Copy } from 'lucide-react'
+import { Phone, MessageSquare, X, Star, DollarSign, Navigation, Car, CheckCircle, Shield, Copy, AlertTriangle } from 'lucide-react'
 import dynamic from 'next/dynamic'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
 
 const MapComponent = dynamic(() => import('./MapComponent'), { ssr: false })
 
@@ -93,6 +104,25 @@ export default function RideStatus({ ride, user, onRideUpdate, onCancelRide }) {
       if (!response.ok) throw new Error('Failed to cancel ride')
 
       toast.success('Ride cancelled')
+      onCancelRide()
+    } catch (error) {
+      toast.error(error.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleSOS = async () => {
+    setLoading(true)
+    try {
+      const response = await fetch(`/api/rides/${ride.id}/sos`, {
+        method: 'POST',
+      })
+      if (!response.ok) throw new Error('Failed to trigger emergency SOS.')
+      
+      toast.error('EMERGENCY SOS TRIGGERED! Authorities notified and ride cancelled.', {
+        duration: 10000,
+      })
       onCancelRide()
     } catch (error) {
       toast.error(error.message)
@@ -344,6 +374,34 @@ export default function RideStatus({ ride, user, onRideUpdate, onCancelRide }) {
               <X className="h-4 w-4 mr-2" />
               Cancel Ride
             </Button>
+          )}
+
+          {currentRide.status !== 'completed' && currentRide.status !== 'cancelled' && (
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button variant="destructive" className="w-full mt-2 bg-red-600 hover:bg-red-700 text-white font-bold tracking-wider" disabled={loading}>
+                  <AlertTriangle className="h-5 w-5 mr-2 animate-pulse" />
+                  EMERGENCY SOS
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle className="text-red-600 flex items-center gap-2">
+                    <AlertTriangle className="h-6 w-6" />
+                    TRIGGER EMERGENCY SOS?
+                  </AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This will immediately alert local emergency services and cancel your current ride. Do you need immediate assistance? THIS ACTION CANNOT BE UNDONE.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction onClick={handleSOS} className="bg-red-600 hover:bg-red-700 font-bold text-white">
+                    YES, TRIGGER SOS
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
           )}
         </CardContent>
       </Card>

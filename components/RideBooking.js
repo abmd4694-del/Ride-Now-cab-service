@@ -39,6 +39,8 @@ export default function RideBooking({ user, onBookRide }) {
   const [estimatedFare, setEstimatedFare] = useState(null)
   const [estimatedTime, setEstimatedTime] = useState(null)
   const [loading, setLoading] = useState(false)
+  const [promoCode, setPromoCode] = useState('')
+  const [discountApplied, setDiscountApplied] = useState(false)
   const [nearbyPlaces, setNearbyPlaces] = useState([])
   const [loadingPlaces, setLoadingPlaces] = useState(false)
   const pickupRef = useRef(null)
@@ -204,13 +206,26 @@ export default function RideBooking({ user, onBookRide }) {
         dropoffLocation.lat, dropoffLocation.lng
       )
       const carType = CAR_TYPES.find(c => c.id === selectedCarType)
-      const fare = (BASE_FARE + (distance * PER_KM_RATE)) * carType.multiplier
+      let fare = (BASE_FARE + (distance * PER_KM_RATE)) * carType.multiplier
       const time = Math.ceil(distance * 2.5) // ~2.5 min per km
+
+      if (discountApplied) {
+        fare = fare * 0.8
+      }
 
       setEstimatedFare(fare.toFixed(2))
       setEstimatedTime(time)
     }
-  }, [pickupLocation, dropoffLocation, selectedCarType])
+  }, [pickupLocation, dropoffLocation, selectedCarType, discountApplied])
+
+  const handleApplyPromo = () => {
+    if (promoCode.trim().toUpperCase() === 'MAR2026') {
+      setDiscountApplied(true)
+      toast.success('Promo code applied! 20% discount added.')
+    } else {
+      toast.error('Invalid promo code.')
+    }
+  }
 
   // Get current location
   const getCurrentLocation = () => {
@@ -539,7 +554,21 @@ export default function RideBooking({ user, onBookRide }) {
                   <DollarSign className="h-5 w-5 text-primary" />
                   <span className="text-muted-foreground">Estimated Fare</span>
                 </div>
-                <span className="text-2xl font-bold">${estimatedFare}</span>
+                <div className="flex items-center gap-2">
+                  {discountApplied && <Badge variant="secondary" className="bg-green-100 text-green-800 border-green-200">20% OFF</Badge>}
+                  <span className="text-2xl font-bold">${estimatedFare}</span>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 mt-2">
+                <Input
+                  placeholder="Promo Code (e.g. MAR2026)"
+                  value={promoCode}
+                  onChange={(e) => setPromoCode(e.target.value)}
+                  disabled={discountApplied}
+                />
+                <Button variant="outline" onClick={handleApplyPromo} disabled={discountApplied || !promoCode}>
+                  Apply
+                </Button>
               </div>
               <div className="flex justify-between items-center p-4 bg-muted rounded-lg">
                 <div className="flex items-center gap-2">
